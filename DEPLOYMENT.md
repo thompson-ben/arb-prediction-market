@@ -16,7 +16,7 @@ market data, and the operational facts needed to evaluate data quality.
 - [ ] Deploy. Visit `/` (terminal), `/validation`, `/disagreements`, `/review`,
       `/history`.
 - [ ] Confirm the cron job appears under **Settings → Cron Jobs** (defined in
-      `vercel.json`, hourly by default).
+      `vercel.json`, **once daily** — the Hobby-plan max; more frequent on Pro).
 - [ ] Manually hit `/api/cron/scan` once to seed history, then check `/history`.
 - [ ] Verify live data is flowing on `/validation` (markets per venue > 0).
 
@@ -68,10 +68,17 @@ market data, and the operational facts needed to evaluate data quality.
 
 - **On-demand**: every page load runs a fresh scan (upstream responses cached
   for `REVALIDATE_SECONDS = 60s`, so rapid reloads are cheap).
-- **Scheduled**: `vercel.json` runs `/api/cron/scan` **hourly** to record
-  history + diagnostics snapshots. Adjust the cron `schedule` to taste; note
-  Vercel plan limits on cron frequency. Hourly for ~1–2 weeks yields enough data
-  to answer the success-criteria questions on opportunity duration and frequency.
+- **Scheduled**: `vercel.json` runs `/api/cron/scan` **once daily** (`0 0 * * *`).
+  This is the **Hobby-plan limit** — Vercel rejects (fails the deployment for)
+  any cron more frequent than daily on Hobby. On **Pro**, you can increase the
+  frequency (e.g. hourly `0 * * * *`) for finer-grained history.
+- **Higher frequency on Hobby (optional)**: keep the daily Vercel cron and *also*
+  hit `/api/cron/scan` from an **external scheduler** (e.g. cron-job.org, GitHub
+  Actions) every hour, passing `Authorization: Bearer $CRON_SECRET`. External
+  HTTP calls are not subject to Vercel's cron-frequency limit. Hourly for ~1–2
+  weeks yields enough data to answer the success-criteria questions on
+  opportunity duration and frequency; daily still works but resolves duration
+  only to day granularity.
 
 ## 6. Answering the success-criteria questions
 
