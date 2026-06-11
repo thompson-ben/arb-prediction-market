@@ -5,6 +5,14 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# Next.js
+.next/
+out/
+next-env.d.ts
+
+# Vercel
+.vercel
+
 # Logs
 *.log
 npm-debug.log*
