@@ -162,6 +162,8 @@ export interface MatchDiagnostics {
   matchesCreated: number;
   /** Pairs scored but rejected as below threshold. */
   matchesRejected: number;
+  /** Sum of confidence scores across created matches (for averaging). */
+  confidenceSum: number;
   /** Histogram of created-match confidence scores. */
   confidenceHistogram: ConfidenceBin[];
 }

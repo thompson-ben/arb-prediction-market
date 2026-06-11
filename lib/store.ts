@@ -115,5 +115,5 @@ export function getStore(): DocStore {
 export const KEYS = {
   reviews: "reviews",
   history: "history",
-  diagnostics: "diagnostics_snapshots",
+  analytics: "analytics_snapshots",
 } as const;

@@ -27,6 +27,7 @@ market data, and the operational facts needed to evaluate data quality.
 | `KV_REST_API_URL` / `KV_REST_API_TOKEN` | For persistence | — | Vercel KV / Upstash Redis REST endpoint. Without it, storage is ephemeral. |
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | alt | — | Alternative names for the same. |
 | `CRON_SECRET` | No | — | If set, `/api/cron/scan` requires a matching Bearer token. |
+| `ADMIN_TOKEN` | No | — | If set, `/analytics` and `/api/export` require `?key=` (or `x-admin-token` header). |
 | `MIN_MARGIN` | No | `0.05` | Default UI margin filter (5%). |
 | `MATCH_THRESHOLD` | No | `0.5` | Default UI confidence filter. |
 | `DISCOVERY_MARGIN` | No | `0` | Server scan margin floor. |
@@ -85,3 +86,23 @@ Once live for a few days with the cron running:
 | How long do they last? | `/history` avg/longest duration |
 | Which venues generate the best opportunities? | `/history` "appearances by venue pair" |
 | Are disagreements more common than arbitrage? | Compare `/disagreements` count vs `/validation` opportunities-above-threshold |
+
+## 7. Admin analytics & export (Phase 3.5)
+
+`/analytics?key=$ADMIN_TOKEN` is an internal business-intelligence dashboard
+(kept out of the main nav). It renders:
+
+- **Opportunity funnel** — Markets → Potential Matches → Accepted Matches →
+  Arbitrage → Executable, with conversion rates between stages.
+- **Data quality** — average confidence, confidence distribution, approved vs
+  rejected %, false-match rate, missing-order-book %.
+- **Venue analytics** — per venue pair: opportunities, avg margin, avg
+  executable margin, avg duration, largest margin.
+- **Daily metrics** — per-scan averages and decision counts by day.
+
+CSV export (for offline analysis):
+`/api/export?type=history|validation|venues&key=$ADMIN_TOKEN`.
+
+Executable metrics come from sampling the **top 8** opportunities' live order
+books each scan (bounded for rate limits), so they are representative rather
+than exhaustive.

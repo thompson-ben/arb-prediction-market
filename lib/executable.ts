@@ -1,26 +1,39 @@
 /**
- * On-demand order-book fetching for executable pricing (Step 6).
+ * On-demand order-book fetching for executable pricing (Step 6 / Phase 3.5).
  *
- * This is intentionally per-opportunity (not bulk): order-book endpoints are
- * rate-limited and only worth hitting for an opportunity the user is actually
- * inspecting. Books that can't be fetched degrade gracefully — the executable
- * panel simply reports "unavailable" rather than failing.
+ * Per-opportunity, not bulk: order-book endpoints are rate-limited and only
+ * worth hitting for opportunities being inspected (detail panel) or sampled
+ * (the analytics cron prices the top-N). Books that can't be fetched degrade
+ * gracefully — pricing reports `available: false` rather than throwing.
  *
- *   • Polymarket — public CLOB book by token id (yes/no token from clobTokenIds).
+ *   • Polymarket — public CLOB book by token id (yes/no from clobTokenIds).
  *   • Kalshi     — public order-book endpoint by ticker.
- *   • PredictIt  — no public order book; only best buy/sell, so unavailable.
+ *   • PredictIt  — no public order book → unavailable.
  */
 
-import type { OrderBook, OrderBookLevel } from "@/lib/types";
+import { computeExecutablePricing } from "@/lib/orderbook";
+import type {
+  ExecutablePricing,
+  NormalizedMarket,
+  OrderBook,
+  OrderBookLevel,
+  Opportunity,
+  Side,
+  Venue,
+} from "@/lib/types";
 
 const POLY_CLOB = "https://clob.polymarket.com/book";
 const KALSHI_BASE = "https://api.elections.kalshi.com/trade-api/v2";
 
-function levelsFrom(
-  raw: unknown,
-  priceKey: string,
-  sizeKey: string,
-): OrderBookLevel[] {
+export interface LegRef {
+  venue: Venue;
+  /** Kalshi ticker (or any market id). */
+  marketId?: string;
+  /** Polymarket CLOB token id for this outcome. */
+  clobTokenId?: string;
+}
+
+function levelsFrom(raw: unknown, priceKey: string, sizeKey: string): OrderBookLevel[] {
   if (!Array.isArray(raw)) return [];
   const out: OrderBookLevel[] = [];
   for (const item of raw) {
@@ -55,9 +68,9 @@ export async function fetchPolymarketBook(tokenId: string): Promise<OrderBook | 
 }
 
 /**
- * Fetch a Kalshi order book by ticker and project it onto a buy-YES book.
- * Kalshi returns `yes`/`no` resting orders in cents; the cost to BUY YES is
- * (100 − no_bid_price) — i.e. the NO side mirrors YES asks. We expose YES asks.
+ * Fetch a Kalshi order book by ticker and project it onto a buy-`side` book.
+ * Kalshi entries are [price_cents, size]; the cost to BUY one side is mirrored
+ * by the opposite side's resting orders (buy-YES asks come from NO bids).
  */
 export async function fetchKalshiBook(
   ticker: string,
@@ -73,8 +86,6 @@ export async function fetchKalshiBook(
       orderbook?: { yes?: [number, number][]; no?: [number, number][] };
     };
     const book = data.orderbook ?? {};
-    // Each entry is [price_cents, size]. The ask to BUY `side` is mirrored by
-    // the resting orders on the opposite side: buy-YES asks come from NO bids.
     const opposite = side === "yes" ? book.no : book.yes;
     const asks: OrderBookLevel[] = (opposite ?? [])
       .filter((e) => Array.isArray(e) && e.length >= 2)
@@ -85,4 +96,66 @@ export async function fetchKalshiBook(
   } catch {
     return null;
   }
+}
+
+async function fetchBookForRef(ref: LegRef, side: "yes" | "no"): Promise<OrderBook | null> {
+  if (ref.venue === "polymarket" && ref.clobTokenId) {
+    return fetchPolymarketBook(ref.clobTokenId);
+  }
+  if (ref.venue === "kalshi" && ref.marketId) {
+    return fetchKalshiBook(ref.marketId, side);
+  }
+  return null; // PredictIt and others: no public book
+}
+
+/** Fetch both legs' books and compute executable pricing. */
+export async function priceLegs(
+  yes: LegRef,
+  no: LegRef,
+  indicativeMargin: number,
+): Promise<ExecutablePricing> {
+  const [yesBook, noBook] = await Promise.all([
+    fetchBookForRef(yes, "yes"),
+    fetchBookForRef(no, "no"),
+  ]);
+  return computeExecutablePricing(
+    { venue: yes.venue, book: yesBook ?? undefined },
+    { venue: no.venue, book: noBook ?? undefined },
+    indicativeMargin,
+  );
+}
+
+/** The market backing a given leg side (the one whose venue matches the leg). */
+function marketForSide(o: Opportunity, side: Side): NormalizedMarket {
+  const leg = o.legs.find((l) => l.side === side) ?? o.legs[0];
+  return [o.marketA, o.marketB].find((m) => m.venue === leg.venue) ?? o.marketA;
+}
+
+/** Build the order-book leg references for an opportunity. */
+export function legRefsFor(o: Opportunity): {
+  yes: LegRef;
+  no: LegRef;
+  indicativeMargin: number;
+} {
+  const yesMarket = marketForSide(o, "YES");
+  const noMarket = marketForSide(o, "NO");
+  return {
+    indicativeMargin: o.netMargin,
+    yes: {
+      venue: yesMarket.venue,
+      marketId: yesMarket.id,
+      clobTokenId: yesMarket.clobTokenIds?.[0],
+    },
+    no: {
+      venue: noMarket.venue,
+      marketId: noMarket.id,
+      clobTokenId: noMarket.clobTokenIds?.[1],
+    },
+  };
+}
+
+/** Convenience: price an opportunity end-to-end. */
+export function priceOpportunity(o: Opportunity): Promise<ExecutablePricing> {
+  const refs = legRefsFor(o);
+  return priceLegs(refs.yes, refs.no, refs.indicativeMargin);
 }

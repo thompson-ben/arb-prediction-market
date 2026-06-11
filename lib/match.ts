@@ -132,6 +132,7 @@ export function matchMarkets(
   let pairsConsidered = 0;
   let matchesCreated = 0;
   let matchesRejected = 0;
+  let confidenceSum = 0;
   const histogram = makeHistogram();
 
   for (let i = 0; i < markets.length; i++) {
@@ -155,6 +156,7 @@ export function matchMarkets(
         continue;
       }
       matchesCreated += 1;
+      confidenceSum += score;
       addToHistogram(histogram, score);
 
       const arb = computeArb(a, b);
@@ -212,6 +214,7 @@ export function matchMarkets(
       pairsConsidered,
       matchesCreated,
       matchesRejected,
+      confidenceSum,
       confidenceHistogram: histogram,
     },
   };

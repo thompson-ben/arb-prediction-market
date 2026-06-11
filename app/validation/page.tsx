@@ -43,7 +43,7 @@ export default async function ValidationPage() {
 
   const store = getStore();
   const snapshots =
-    (await store.getJSON<{ at: string }[]>(KEYS.diagnostics)) ?? [];
+    (await store.getJSON<{ at: string }[]>(KEYS.analytics)) ?? [];
 
   const matchRate =
     d.match.pairsConsidered > 0

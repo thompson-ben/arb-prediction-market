@@ -1,5 +1,11 @@
+import {
+  type AnalyticsSnapshot,
+  buildSnapshot,
+  summarizeExecutable,
+} from "@/lib/analytics";
 import { CONFIG } from "@/lib/config";
 import { buildDisagreements } from "@/lib/disagreement";
+import { priceOpportunity } from "@/lib/executable";
 import { fetchKalshiMarkets } from "@/lib/kalshi";
 import { upsertHistory } from "@/lib/history";
 import { matchMarkets } from "@/lib/match";
@@ -8,12 +14,17 @@ import { fetchPredictItMarkets } from "@/lib/predictit";
 import { getStore, KEYS } from "@/lib/store";
 import type {
   Disagreement,
+  ExecutablePricing,
   NormalizedMarket,
+  Opportunity,
   OpportunityHistory,
   ScanDiagnostics,
   ScanResult,
   Venue,
 } from "@/lib/types";
+
+/** Number of top opportunities to price with live order books per scan. */
+const EXECUTABLE_SAMPLE_SIZE = 8;
 
 interface VenueSource {
   venue: Venue;
@@ -110,8 +121,38 @@ export async function scanDisagreements(): Promise<DisagreementScan> {
 }
 
 /**
- * Persist a scan into the opportunity-history store and append a diagnostics
- * snapshot. Driven by the cron endpoint so appearance counts track time.
+ * Sample the top opportunities and price them with live order books, then
+ * summarize. Bounded to keep within rate limits and function duration; books
+ * that can't be fetched count toward `missingBook`.
+ */
+async function sampleExecutable(opportunities: Opportunity[]) {
+  const sample = opportunities.slice(0, EXECUTABLE_SAMPLE_SIZE);
+  const priced = await Promise.all(
+    sample.map(async (opportunity) => {
+      let pricing: ExecutablePricing;
+      try {
+        pricing = await priceOpportunity(opportunity);
+      } catch {
+        pricing = {
+          available: false,
+          indicativeMargin: opportunity.netMargin,
+          executableMargin: null,
+          maxStake: null,
+          maxSize: null,
+          legs: [],
+          note: "pricing failed",
+        };
+      }
+      return { opportunity, pricing };
+    }),
+  );
+  return summarizeExecutable(priced);
+}
+
+/**
+ * Persist a scan: update opportunity history and append a full analytics
+ * snapshot (including a sampled executable summary). Driven by the cron
+ * endpoint so appearance counts and metrics track time.
  */
 export async function recordScan(result: ScanResult): Promise<void> {
   const store = getStore();
@@ -121,11 +162,12 @@ export async function recordScan(result: ScanResult): Promise<void> {
   const updated = upsertHistory(history, result.opportunities, result.generatedAt);
   await store.setJSON(KEYS.history, updated);
 
+  const executable = await sampleExecutable(result.opportunities);
+  const snapshot = buildSnapshot(result, executable);
+
   const snapshots =
-    (await store.getJSON<{ at: string; diagnostics: ScanDiagnostics }[]>(
-      KEYS.diagnostics,
-    )) ?? [];
-  snapshots.push({ at: result.generatedAt, diagnostics: result.diagnostics });
-  // Keep the most recent 500 snapshots.
-  await store.setJSON(KEYS.diagnostics, snapshots.slice(-500));
+    (await store.getJSON<AnalyticsSnapshot[]>(KEYS.analytics)) ?? [];
+  snapshots.push(snapshot);
+  // Keep the most recent 1000 snapshots (~6 weeks at hourly).
+  await store.setJSON(KEYS.analytics, snapshots.slice(-1000));
 }
