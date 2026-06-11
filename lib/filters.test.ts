@@ -10,6 +10,7 @@ function opp(overrides: Partial<Opportunity> = {}): Opportunity {
     matchScore: 0.8,
     score: 70,
     status: "VERIFIED",
+    suspicionScore: 10,
     riskNotes: [],
     pricing: "indicative",
     venues: ["polymarket", "kalshi"],

@@ -1,8 +1,8 @@
 import { ReviewQueue, type ReviewItem } from "@/components/terminal/ReviewQueue";
 import { opportunityKey } from "@/lib/history";
-import { confidenceReasons, concernReasons } from "@/lib/reasons";
 import { scanOpportunities } from "@/lib/scan";
 import { getStore, KEYS } from "@/lib/store";
+import { assessMatch } from "@/lib/trust";
 import type { ReviewDecision } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +17,12 @@ export default async function ReviewPage() {
 
   const items: ReviewItem[] = result.opportunities.map((o) => {
     const pairId = opportunityKey(o);
+    const assessment = assessMatch({
+      marketA: o.marketA,
+      marketB: o.marketB,
+      netMargin: o.netMargin,
+      matchScore: o.matchScore,
+    });
     return {
       pairId,
       question: o.question,
@@ -25,8 +31,8 @@ export default async function ReviewPage() {
       netMarginPct: o.netMarginPct,
       marketA: { venue: o.marketA.venue, title: o.marketA.title, url: o.marketA.url },
       marketB: { venue: o.marketB.venue, title: o.marketB.title, url: o.marketB.url },
-      confidenceReasons: confidenceReasons(o.marketA, o.marketB),
-      concernReasons: concernReasons(o.marketA, o.marketB, o.netMargin),
+      confidenceReasons: assessment.supportReasons,
+      concernReasons: assessment.concernReasons,
       status: reviews[pairId]?.status ?? null,
     };
   });

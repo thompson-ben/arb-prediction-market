@@ -1,7 +1,8 @@
 import { categorize } from "@/lib/category";
 import { jaccard } from "@/lib/normalize";
-import { bottleneckLiquidity, deriveStatus, riskNotes } from "@/lib/risk";
+import { bottleneckLiquidity, riskNotes } from "@/lib/risk";
 import { computeScore } from "@/lib/scoring";
+import { assessMatch } from "@/lib/trust";
 import type {
   ArbLeg,
   ConfidenceBin,
@@ -175,6 +176,12 @@ export function matchMarkets(
         liquidity,
         endDate,
       };
+      const assessment = assessMatch({
+        marketA: a,
+        marketB: b,
+        netMargin: arb.netMargin,
+        matchScore: score,
+      });
 
       opportunities.push({
         id: `${a.id}::${b.id}`,
@@ -187,7 +194,8 @@ export function matchMarkets(
           liquidity,
           endDate,
         }),
-        status: deriveStatus(riskInput),
+        status: assessment.status,
+        suspicionScore: assessment.suspicionScore,
         riskNotes: riskNotes(riskInput),
         pricing: "indicative",
         venues,

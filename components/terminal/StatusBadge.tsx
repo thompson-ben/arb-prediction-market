@@ -12,7 +12,7 @@ const STYLES: Record<OpportunityStatus, { label: string; cls: string; dot: strin
     dot: "bg-amber-400",
   },
   HIGH_RISK: {
-    label: "HIGH RISK",
+    label: "LIKELY BAD MATCH",
     cls: "border-rose-500/40 bg-rose-500/10 text-rose-300",
     dot: "bg-rose-400",
   },

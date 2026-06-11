@@ -99,8 +99,10 @@ export interface Opportunity {
   matchScore: number;
   /** Actionability score, 0–100 (margin + confidence + liquidity + time). */
   score: number;
-  /** Trust indicator derived from confidence and margin. */
+  /** Trust indicator derived from confidence, suspicion, and margin. */
   status: OpportunityStatus;
+  /** Automated suspicion score, 0–100 (higher = verify harder). */
+  suspicionScore: number;
   /** Human-readable risk notes for the detail view. */
   riskNotes: string[];
   /** Whether prices are indicative quotes or executable order-book fills. */

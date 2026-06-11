@@ -22,9 +22,14 @@ default), built with Next.js so it deploys to **Vercel** out of the box.
   confidence, venue, expiry window, and category, plus sort control. Defaults
   to a 5% margin filter; **always shows the Top 5 by score** when nothing meets
   the filters, so the dashboard is never empty.
-- **Opportunity detail panel** — click any row for full metrics (gross/net
-  margin, confidence, liquidity, resolution date), risk notes, both venue legs
-  with direct links, and a **VERIFIED / REVIEW REQUIRED / HIGH RISK** indicator.
+- **Trust-first opportunity detail panel** — leads with a prominent trust score
+  (🟢 VERIFIED / 🟡 REVIEW REQUIRED / 🔴 LIKELY BAD MATCH) and a plain-English
+  analyst summary, then walks through **Match Analysis** (are these the same
+  event? with reasons for/against and an automated suspicion score), Confidence
+  Assessment, Arbitrage Summary, **Tradeability** (liquidity, order-book
+  availability, executable margin/stake), and only then the Profit Calculator —
+  which carries confidence-based disclaimers. The goal is to understand *why* an
+  opportunity exists before looking at profit.
 - **Execution calculator** — enter a stake and see per-leg allocation, total
   capital, guaranteed net profit, and net ROI, updating live.
 - **Opportunity Score (0–100)** — blends margin, confidence, liquidity, and
