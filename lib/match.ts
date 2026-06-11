@@ -2,7 +2,13 @@ import { categorize } from "@/lib/category";
 import { jaccard } from "@/lib/normalize";
 import { bottleneckLiquidity, deriveStatus, riskNotes } from "@/lib/risk";
 import { computeScore } from "@/lib/scoring";
-import type { ArbLeg, NormalizedMarket, Opportunity } from "@/lib/types";
+import type {
+  ArbLeg,
+  ConfidenceBin,
+  MatchDiagnostics,
+  NormalizedMarket,
+  Opportunity,
+} from "@/lib/types";
 import { VENUES } from "@/lib/venues";
 
 /** A price is usable for an arb leg only if it is a real, sub-\$1 cost. */
@@ -100,18 +106,18 @@ export interface MatchOptions {
 }
 
 /**
- * Match markets across venues from a single pooled list and return the
- * cross-venue arbitrage opportunities whose *net* margin meets `minMargin`,
- * sorted by net margin descending.
+ * Match markets across venues from a single pooled list. Returns the
+ * cross-venue arbitrage opportunities whose *net* margin meets `minMargin`
+ * (sorted by actionability score) along with match-level diagnostics.
  *
  * Uses an inverted token index so each market is only compared against
  * candidates that share a significant token, keeping this near-linear rather
  * than O(n²). Each unordered cross-venue pair is evaluated at most once.
  */
-export function buildOpportunities(
+export function matchMarkets(
   markets: NormalizedMarket[],
   options: MatchOptions,
-): Opportunity[] {
+): { opportunities: Opportunity[]; diagnostics: MatchDiagnostics } {
   // token -> indices of markets containing it
   const index = new Map<string, number[]>();
   markets.forEach((market, i) => {
@@ -123,6 +129,10 @@ export function buildOpportunities(
   });
 
   const opportunities: Opportunity[] = [];
+  let pairsConsidered = 0;
+  let matchesCreated = 0;
+  let matchesRejected = 0;
+  const histogram = makeHistogram();
 
   for (let i = 0; i < markets.length; i++) {
     const a = markets[i];
@@ -138,8 +148,14 @@ export function buildOpportunities(
       const b = markets[j];
       if (a.venue === b.venue) continue; // arb requires two different venues
 
+      pairsConsidered += 1;
       const score = jaccard(a.tokens, b.tokens);
-      if (score < options.matchThreshold) continue;
+      if (score < options.matchThreshold) {
+        matchesRejected += 1;
+        continue;
+      }
+      matchesCreated += 1;
+      addToHistogram(histogram, score);
 
       const arb = computeArb(a, b);
       if (arb === null || arb.netMargin < options.minMargin) continue;
@@ -188,5 +204,45 @@ export function buildOpportunities(
   }
 
   // Default ordering is by actionability score (Priority 6).
-  return opportunities.sort((x, y) => y.score - x.score);
+  opportunities.sort((x, y) => y.score - x.score);
+
+  return {
+    opportunities,
+    diagnostics: {
+      pairsConsidered,
+      matchesCreated,
+      matchesRejected,
+      confidenceHistogram: histogram,
+    },
+  };
+}
+
+/**
+ * Backwards-compatible wrapper that returns just the opportunities.
+ */
+export function buildOpportunities(
+  markets: NormalizedMarket[],
+  options: MatchOptions,
+): Opportunity[] {
+  return matchMarkets(markets, options).opportunities;
+}
+
+/** Build empty confidence-histogram bins spanning [0.4, 1.0] in 0.1-wide steps. */
+function makeHistogram(): ConfidenceBin[] {
+  const bins: ConfidenceBin[] = [];
+  for (let lo = 0.4; lo < 1.0 - 1e-9; lo += 0.1) {
+    const min = Math.round(lo * 100) / 100;
+    const max = Math.round((lo + 0.1) * 100) / 100;
+    bins.push({ label: `${Math.round(min * 100)}–${Math.round(max * 100)}%`, min, max, count: 0 });
+  }
+  return bins;
+}
+
+function addToHistogram(bins: ConfidenceBin[], score: number): void {
+  for (const bin of bins) {
+    if (score >= bin.min && (score < bin.max || (bin.max >= 1 && score <= 1))) {
+      bin.count += 1;
+      return;
+    }
+  }
 }

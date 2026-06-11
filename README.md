@@ -33,6 +33,33 @@ default), built with Next.js so it deploys to **Vercel** out of the box.
   executable-pricing path, ready to replace indicative quotes later.
 - Loading skeletons, empty states, partial-outage handling, mobile-responsive.
 
+## Validation & market intelligence
+
+Beyond the trading terminal (`/`), the app includes tooling to evaluate whether
+the opportunities are genuinely valuable on live data:
+
+- **`/validation`** — internal diagnostics: markets per venue, pairs considered,
+  matches created/rejected, confidence distribution, opportunities found vs
+  above-threshold, average/largest margin.
+- **`/disagreements`** — the **Market Disagreements** engine: events where
+  venues price probability materially differently (distinct from arbitrage),
+  ranked by spread.
+- **`/review`** — a review queue for questionable matches with reasons for
+  confidence and concern; mark **Approved / Rejected / Needs Review** (persisted).
+- **`/history`** — longitudinal opportunity history (first/last seen, peak
+  margin, duration, appearances), populated by the scheduled scan.
+- **`/api/cron/scan`** — Vercel Cron endpoint that records history + diagnostics
+  snapshots over time. **`/api/executable`** computes order-book-aware
+  (executable) margin on demand, shown side-by-side with the indicative margin.
+
+See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for the deployment checklist, required
+environment variables, upstream endpoints, rate limits, and how to answer the
+live-validation success-criteria questions.
+
+> **Persistence note:** review decisions and history require a KV store
+> (Vercel KV / Upstash Redis) on Vercel — set `KV_REST_API_URL` /
+> `KV_REST_API_TOKEN`. Without it, storage is ephemeral.
+
 ## How it works
 
 ```

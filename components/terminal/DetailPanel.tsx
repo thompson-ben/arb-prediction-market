@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { ExecutablePanel } from "@/components/terminal/ExecutablePanel";
 import { ExecutionCalculator } from "@/components/terminal/ExecutionCalculator";
 import { StatusBadge } from "@/components/terminal/StatusBadge";
 import { cents, compactMoney, formatDate, pct, relativeExpiry } from "@/lib/format";
@@ -119,6 +120,13 @@ export function DetailPanel({
               <VenueCard market={o.marketA} leg={legForMarket(o, o.marketA)} />
               <VenueCard market={o.marketB} leg={legForMarket(o, o.marketB)} />
             </div>
+          </div>
+
+          <div>
+            <div className="mb-2 text-xs font-medium uppercase tracking-wider text-white/40">
+              Indicative vs executable
+            </div>
+            <ExecutablePanel opportunity={o} />
           </div>
 
           <div>

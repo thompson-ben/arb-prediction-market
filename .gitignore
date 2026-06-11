@@ -13,6 +13,9 @@ next-env.d.ts
 # Vercel
 .vercel
 
+# Local document store
+.data/
+
 # Logs
 *.log
 npm-debug.log*

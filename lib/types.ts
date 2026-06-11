@@ -71,6 +71,8 @@ export interface NormalizedMarket {
   tokens: string[];
   /** Executable depth — reserved for the order-book pricing path (Priority 5). */
   book?: OrderBook;
+  /** Polymarket CLOB token ids ([yesTokenId, noTokenId]) for order-book fetches. */
+  clobTokenIds?: string[];
 }
 
 /** One leg of an arbitrage trade: a single outcome to buy on a single venue. */
@@ -135,9 +137,127 @@ export interface ScanResult {
   marketsScanned: number;
   /** Number of venues that returned data. */
   venuesScanned: number;
+  /** Data-quality diagnostics for the validation dashboard (Step 2). */
+  diagnostics: ScanDiagnostics;
   /** Per-venue fetch errors, if any (partial-result mode). */
   errors: Partial<Record<Venue, string>>;
   /** Discovery thresholds used for the scan (display floor, not user filters). */
   config: { minMargin: number; matchThreshold: number };
   generatedAt: string;
+}
+
+// ── Step 2: validation / data-quality diagnostics ─────────────────────────
+
+export interface ConfidenceBin {
+  label: string;
+  min: number;
+  max: number;
+  count: number;
+}
+
+export interface MatchDiagnostics {
+  /** Cross-venue candidate pairs that were scored. */
+  pairsConsidered: number;
+  /** Pairs whose similarity met the discovery threshold. */
+  matchesCreated: number;
+  /** Pairs scored but rejected as below threshold. */
+  matchesRejected: number;
+  /** Histogram of created-match confidence scores. */
+  confidenceHistogram: ConfidenceBin[];
+}
+
+export interface ScanDiagnostics {
+  marketsScanned: number;
+  marketsByVenue: Partial<Record<Venue, number>>;
+  venuesScanned: number;
+  match: MatchDiagnostics;
+  /** Matches that yielded a positive-margin arbitrage (discovery floor). */
+  opportunitiesFound: number;
+  /** Opportunities at or above the display threshold (default 5%). */
+  opportunitiesAboveThreshold: number;
+  averageMargin: number | null;
+  largestMargin: number | null;
+}
+
+// ── Step 3: match review system ───────────────────────────────────────────
+
+export type ReviewStatus = "approved" | "rejected" | "needs_review";
+
+export interface ReviewDecision {
+  pairId: string;
+  status: ReviewStatus;
+  updatedAt: string;
+  note?: string;
+}
+
+// ── Step 4: market disagreement engine ────────────────────────────────────
+
+export interface VenueProbability {
+  venue: Venue;
+  /** Implied YES probability (0–1), mid of available quotes. */
+  impliedYes: number;
+  market: NormalizedMarket;
+}
+
+export interface Disagreement {
+  id: string;
+  question: string;
+  category: Category;
+  /** Per-venue implied probabilities, sorted high → low. */
+  quotes: VenueProbability[];
+  /** max(impliedYes) − min(impliedYes). */
+  spread: number;
+  /** Worst-link match confidence within the cluster. */
+  confidence: number;
+  endDate?: string;
+}
+
+// ── Step 5: opportunity history ───────────────────────────────────────────
+
+export interface OpportunityHistory {
+  /** Stable key from the sorted pair of market ids. */
+  key: string;
+  question: string;
+  category: Category;
+  venues: Venue[];
+  firstSeen: string;
+  lastSeen: string;
+  /** Highest net margin observed. */
+  peakMargin: number;
+  /** Most recent net margin observed. */
+  lastMargin: number;
+  /** Number of scans in which this opportunity appeared. */
+  appearances: number;
+}
+
+// ── Step 6: executable (order-book) pricing ───────────────────────────────
+
+export interface ExecutableLeg {
+  venue: Venue;
+  side: Side;
+  available: boolean;
+  /** Shares fillable for the computed max size. */
+  filledSize: number;
+  /** Blended average ask price across consumed levels. */
+  averagePrice: number;
+  /** Best ask, if known. */
+  topAsk?: number;
+  /** Total shares resting on the ask side. */
+  depth: number;
+}
+
+export interface ExecutablePricing {
+  /** True when both legs have usable order books. */
+  available: boolean;
+  /** Single-quote margin (what the scanner shows everywhere else). */
+  indicativeMargin: number;
+  /** Size-aware margin from walking both books, or null if unavailable. */
+  executableMargin: number | null;
+  /** Maximum capital deployable while keeping the executable margin positive. */
+  maxStake: number | null;
+  /** Maximum number of share-pairs fillable. */
+  maxSize: number | null;
+  legs: ExecutableLeg[];
+  /** Human note explaining availability/limitations. */
+  note?: string;
 }

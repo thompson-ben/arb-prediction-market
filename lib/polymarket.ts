@@ -34,6 +34,7 @@ interface GammaMarket {
   endDate?: string;
   volume?: unknown;
   liquidity?: unknown;
+  clobTokenIds?: unknown;
 }
 
 /** Normalize a single Gamma market, or return null if it isn't a usable binary market. */
@@ -72,6 +73,7 @@ export function normalizePolymarketMarket(m: GammaMarket): NormalizedMarket | nu
     volume: toNumber(m.volume),
     liquidity: toNumber(m.liquidity),
     tokens: normalizeTokens(title),
+    clobTokenIds: parseStringArray(m.clobTokenIds) ?? undefined,
   };
 }
 
