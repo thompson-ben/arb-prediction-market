@@ -6,6 +6,7 @@ import { MatchAnalysis } from "@/components/terminal/MatchAnalysis";
 import { Tradeability } from "@/components/terminal/Tradeability";
 import { TrustBadge } from "@/components/terminal/TrustBadge";
 import { cents, formatDate, pct, relativeExpiry } from "@/lib/format";
+import { track } from "@/lib/track";
 import { assessMatch } from "@/lib/trust";
 import type { ArbLeg, ExecutablePricing, NormalizedMarket, Opportunity, Side } from "@/lib/types";
 import { venueLabel } from "@/lib/venues";
@@ -38,13 +39,14 @@ function Section({
   );
 }
 
-function LegPill({ leg }: { leg: ArbLeg }) {
+function LegPill({ leg, opportunityId }: { leg: ArbLeg; opportunityId: string }) {
   const sideColor = leg.side === "YES" ? "text-emerald-300" : "text-rose-300";
   return (
     <a
       href={leg.url}
       target="_blank"
       rel="noopener noreferrer"
+      onClick={() => track("venue_click", { opportunityId, venue: leg.venue })}
       className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-2.5 py-1 text-sm hover:bg-white/10"
     >
       <span className="text-white/55">{venueLabel(leg.venue)}</span>
@@ -90,6 +92,7 @@ export function DetailPanel({
   useEffect(() => {
     if (!opportunity) return;
     let cancelled = false;
+    track("expanded", { opportunityId: opportunity.id });
     const yesMarket = marketForSide(opportunity, "YES");
     const noMarket = marketForSide(opportunity, "NO");
     const payload = {
@@ -185,7 +188,7 @@ export function DetailPanel({
             <div className="space-y-3 rounded-xl border border-white/10 bg-white/[0.02] p-4">
               <div className="flex flex-wrap gap-2">
                 {o.legs.map((leg, i) => (
-                  <LegPill key={i} leg={leg} />
+                  <LegPill key={i} leg={leg} opportunityId={o.id} />
                 ))}
               </div>
               <div className="grid grid-cols-3 gap-2 text-center">

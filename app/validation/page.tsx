@@ -1,6 +1,6 @@
+import { dbEnabled, getBiDaily } from "@/lib/db";
 import { pct } from "@/lib/format";
 import { scanOpportunities } from "@/lib/scan";
-import { getStore, KEYS } from "@/lib/store";
 import { venueLabel } from "@/lib/venues";
 import type { ScanDiagnostics, Venue } from "@/lib/types";
 
@@ -42,9 +42,7 @@ export default async function ValidationPage() {
   const result = await scanOpportunities();
   const d = result.diagnostics;
 
-  const store = getStore();
-  const snapshots =
-    (await store.getJSON<{ at: string }[]>(KEYS.analytics)) ?? [];
+  const daily = await getBiDaily(90);
 
   const matchRate =
     d.match.pairsConsidered > 0
@@ -57,8 +55,10 @@ export default async function ValidationPage() {
         <h1 className="text-xl font-semibold text-white">Validation &amp; Data Quality</h1>
         <p className="mt-1 text-sm text-white/45">
           Internal diagnostics for the current live scan. Store:{" "}
-          <span className="font-mono text-white/60">{store.kind}</span> ·{" "}
-          {snapshots.length} recorded snapshot(s) ·{" "}
+          <span className="font-mono text-white/60">
+            {dbEnabled() ? "supabase" : "not configured"}
+          </span>{" "}
+          · {daily.length} day(s) recorded ·{" "}
           {new Date(result.generatedAt).toLocaleString()}
         </p>
       </header>

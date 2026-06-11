@@ -57,13 +57,20 @@ export function ReviewQueue({
 
   async function decide(pairId: string, status: ReviewStatus) {
     setPending(pairId);
+    const item = items.find((it) => it.pairId === pairId);
     // Optimistic update.
     setItems((prev) => prev.map((it) => (it.pairId === pairId ? { ...it, status } : it)));
     try {
       await fetch("/api/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pairId, status }),
+        body: JSON.stringify({
+          pairId,
+          status,
+          confidence: item?.confidence,
+          reasonsSupport: item?.confidenceReasons,
+          reasonsConcern: item?.concernReasons,
+        }),
       });
     } finally {
       setPending(null);
@@ -78,15 +85,14 @@ export function ReviewQueue({
     { key: "all", label: `All (${counts.all})` },
   ];
 
-  const ephemeral = storeKind !== "redis";
+  const ephemeral = storeKind !== "supabase";
 
   return (
     <div className="space-y-4">
       {ephemeral && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-200/90">
-          Storage adapter is <span className="font-mono">{storeKind}</span> —
-          decisions may not persist across deployments. Configure a KV store
-          (KV_REST_API_URL / KV_REST_API_TOKEN) for durable persistence.
+          Supabase is not configured — review decisions will not persist. Set
+          SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
         </div>
       )}
 

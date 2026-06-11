@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
+import { dbEnabled, dbHealthy } from "@/lib/db";
 import { fetchWithTimeout } from "@/lib/http";
-import { getStore } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -39,27 +39,19 @@ export async function GET() {
     ping("https://www.predictit.org/api/marketdata/all/"),
   ]);
 
-  const store = getStore();
-  let storeWritable = false;
-  let storeError: string | undefined;
-  try {
-    await store.setJSON("__health", { at: new Date().toISOString() });
-    const probe = await store.getJSON<{ at: string }>("__health");
-    storeWritable = probe != null;
-  } catch (e) {
-    storeError = e instanceof Error ? e.message : "error";
-  }
+  const configured = dbEnabled();
+  const dbOk = configured ? await dbHealthy() : false;
 
   const venues = { polymarket, kalshi, predictit };
   const venuesOk = polymarket.ok && kalshi.ok && predictit.ok;
-  const ok = venuesOk && storeWritable;
+  const ok = venuesOk && dbOk;
 
   return NextResponse.json(
     {
       ok,
       at: new Date().toISOString(),
       venues,
-      store: { kind: store.kind, writable: storeWritable, persistent: store.kind === "redis", error: storeError },
+      database: { provider: "supabase", configured, reachable: dbOk },
     },
     { status: ok ? 200 : 503 },
   );

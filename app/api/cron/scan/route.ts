@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { recordScan, scanOpportunities } from "@/lib/scan";
+import {
+  recordDisagreements,
+  recordScan,
+  scanDisagreements,
+  scanOpportunities,
+} from "@/lib/scan";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -23,12 +28,17 @@ export async function GET(request: Request) {
   try {
     const result = await scanOpportunities();
     await recordScan(result);
+
+    const disagreements = await scanDisagreements();
+    await recordDisagreements(disagreements);
+
     return NextResponse.json({
       ok: true,
       generatedAt: result.generatedAt,
       marketsScanned: result.marketsScanned,
       opportunitiesFound: result.diagnostics.opportunitiesFound,
       opportunitiesAboveThreshold: result.diagnostics.opportunitiesAboveThreshold,
+      disagreements: disagreements.disagreements.length,
       errors: result.errors,
     });
   } catch (e) {

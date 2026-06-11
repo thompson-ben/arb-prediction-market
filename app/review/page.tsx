@@ -1,9 +1,8 @@
 import { ReviewQueue, type ReviewItem } from "@/components/terminal/ReviewQueue";
+import { dbEnabled, getReviews } from "@/lib/db";
 import { opportunityKey } from "@/lib/history";
 import { scanOpportunities } from "@/lib/scan";
-import { getStore, KEYS } from "@/lib/store";
 import { assessMatch } from "@/lib/trust";
-import type { ReviewDecision } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -11,10 +10,8 @@ export const maxDuration = 60;
 const MAX_ITEMS = 150;
 
 export default async function ReviewPage() {
-  const result = await scanOpportunities();
-  const store = getStore();
-  const reviews =
-    (await store.getJSON<Record<string, ReviewDecision>>(KEYS.reviews)) ?? {};
+  const [result, reviews] = await Promise.all([scanOpportunities(), getReviews()]);
+  const storeKind = dbEnabled() ? "supabase" : "disabled";
 
   const items: ReviewItem[] = result.opportunities.map((o) => {
     const pairId = opportunityKey(o);
@@ -56,7 +53,7 @@ export default async function ReviewPage() {
           which matches you trust.
         </p>
       </header>
-      <ReviewQueue initialItems={items.slice(0, MAX_ITEMS)} storeKind={store.kind} />
+      <ReviewQueue initialItems={items.slice(0, MAX_ITEMS)} storeKind={storeKind} />
     </main>
   );
 }

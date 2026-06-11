@@ -7,9 +7,10 @@ market data, and the operational facts needed to evaluate data quality.
 
 - [ ] Import `thompson-ben/arb-prediction-market` into Vercel (framework
       auto-detects as **Next.js** — no build settings needed).
-- [ ] Create a **KV store** (Vercel KV or Upstash Redis) and link it to the
-      project. This sets `KV_REST_API_URL` / `KV_REST_API_TOKEN` automatically.
-      *Required for durable history and review decisions.*
+- [ ] Set up **Supabase** (system of record): create a project, run
+      `supabase/migrations/0001_initial_schema.sql`, and set `SUPABASE_URL` +
+      `SUPABASE_SERVICE_ROLE_KEY` in Vercel. See **[SUPABASE.md](./SUPABASE.md)**.
+      *Required for all permanent data.*
 - [ ] (Optional) Set `CRON_SECRET` to protect the scheduled scan.
 - [ ] (Optional) Tune `MIN_MARGIN`, `MATCH_THRESHOLD`, `MAX_MARKETS` in
       **Settings → Environment Variables** (see `.env.example`).
@@ -18,8 +19,8 @@ market data, and the operational facts needed to evaluate data quality.
 - [ ] Confirm the cron job appears under **Settings → Cron Jobs** (defined in
       `vercel.json`, **once daily** — the Hobby-plan max; more frequent on Pro).
 - [ ] Hit **`/api/health`** — should return `200` with every venue `ok: true`
-      and `store.persistent: true` (KV configured). This is your "verify all
-      APIs are functioning" check.
+      and `database.reachable: true` (Supabase configured + schema applied).
+      This is your "verify all APIs are functioning" check.
 - [ ] Manually hit `/api/cron/scan` once to seed history, then check `/history`.
 - [ ] Verify live data is flowing on `/validation` (markets per venue > 0).
 - [ ] (Optional) Enable the hourly GitHub Actions scan for richer data — see §8.
@@ -28,8 +29,9 @@ market data, and the operational facts needed to evaluate data quality.
 
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
-| `KV_REST_API_URL` / `KV_REST_API_TOKEN` | For persistence | — | Vercel KV / Upstash Redis REST endpoint. Without it, storage is ephemeral. |
-| `UPSTASH_REDIS_REST_URL` / `_TOKEN` | alt | — | Alternative names for the same. |
+| `SUPABASE_URL` | **Yes** | — | Supabase project URL (system of record). |
+| `SUPABASE_SERVICE_ROLE_KEY` | **Yes** | — | Service-role key, server-side only. |
+| `MAX_SNAPSHOTS` | No | `250` | Max opportunities snapshotted per scan (top by score). |
 | `CRON_SECRET` | No | — | If set, `/api/cron/scan` requires a matching Bearer token. |
 | `ADMIN_TOKEN` | No | — | If set, `/analytics` and `/api/export` require `?key=` (or `x-admin-token` header). |
 | `MIN_MARGIN` | No | `0.05` | Default UI margin filter (5%). |
@@ -38,7 +40,7 @@ market data, and the operational facts needed to evaluate data quality.
 | `DISCOVERY_MATCH_THRESHOLD` | No | `0.45` | Server scan confidence floor. |
 | `MAX_MARKETS` | No | `500` | Markets pulled per venue per scan. Lower if the cron scan times out. |
 | `REVALIDATE_SECONDS` | No | `60` | Upstream API cache lifetime. |
-| `DATA_DIR` | No | `./.data` (or `/tmp` on Vercel) | File-store directory when no KV is set. |
+| `MAX_SNAPSHOTS` | No | `250` | Max opportunities persisted per scan. |
 
 ## 3. API endpoints used (upstream)
 
@@ -112,7 +114,7 @@ Once live for a few days with the cron running:
 - **Daily metrics** — per-scan averages and decision counts by day.
 
 CSV export (for offline analysis):
-`/api/export?type=history|validation|venues&key=$ADMIN_TOKEN`.
+`/api/export?type=snapshots|history|reviews|venues|categories&key=$ADMIN_TOKEN`.
 
 Executable metrics come from sampling the **top 8** opportunities' live order
 books each scan (bounded for rate limits), so they are representative rather

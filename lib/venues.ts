@@ -54,3 +54,11 @@ export const VENUES: Record<Venue, VenueInfo> = {
 export function venueLabel(venue: Venue): string {
   return VENUES[venue]?.label ?? venue;
 }
+
+/** Pretty-print a stored venue_pair key like "kalshi ↔ polymarket". */
+export function venuePairLabel(pair: string): string {
+  return pair
+    .split(" ↔ ")
+    .map((v) => venueLabel(v as Venue))
+    .join(" ↔ ");
+}

@@ -3,6 +3,7 @@
 import { ScoreBar } from "@/components/terminal/ScoreBar";
 import { StatusBadge } from "@/components/terminal/StatusBadge";
 import { cents, compactMoney, pct, relativeExpiry } from "@/lib/format";
+import { track } from "@/lib/track";
 import type { ArbLeg, Opportunity } from "@/lib/types";
 import { venueLabel } from "@/lib/venues";
 
@@ -45,7 +46,10 @@ export function OpportunityTable({
             return (
               <tr
                 key={o.id}
-                onClick={() => onSelect(o)}
+                onClick={() => {
+                  track("viewed", { opportunityId: o.id });
+                  onSelect(o);
+                }}
                 className={`cursor-pointer border-b border-white/5 transition ${
                   selected ? "bg-emerald-500/[0.07]" : "hover:bg-white/[0.03]"
                 }`}

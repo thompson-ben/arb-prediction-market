@@ -1,23 +1,18 @@
-import {
-  type AnalyticsSnapshot,
-  buildSnapshot,
-  summarizeExecutable,
-} from "@/lib/analytics";
 import { CONFIG } from "@/lib/config";
+import { persistDisagreements, persistScan } from "@/lib/db";
+import { disagreementRow, matchRow, snapshotRow } from "@/lib/dbmap";
 import { buildDisagreements } from "@/lib/disagreement";
+import { opportunityKey } from "@/lib/history";
 import { priceOpportunity } from "@/lib/executable";
 import { fetchKalshiMarkets } from "@/lib/kalshi";
-import { upsertHistory } from "@/lib/history";
 import { matchMarkets } from "@/lib/match";
 import { fetchPolymarketMarkets } from "@/lib/polymarket";
 import { fetchPredictItMarkets } from "@/lib/predictit";
-import { getStore, KEYS } from "@/lib/store";
 import type {
   Disagreement,
   ExecutablePricing,
   NormalizedMarket,
   Opportunity,
-  OpportunityHistory,
   ScanDiagnostics,
   ScanResult,
   Venue,
@@ -25,6 +20,8 @@ import type {
 
 /** Number of top opportunities to price with live order books per scan. */
 const EXECUTABLE_SAMPLE_SIZE = 8;
+/** Max opportunities snapshotted per scan (top by score) to bound DB growth. */
+const MAX_SNAPSHOTS_PER_SCAN = Number(process.env.MAX_SNAPSHOTS ?? 250);
 
 interface VenueSource {
   venue: Venue;
@@ -121,53 +118,48 @@ export async function scanDisagreements(): Promise<DisagreementScan> {
 }
 
 /**
- * Sample the top opportunities and price them with live order books, then
- * summarize. Bounded to keep within rate limits and function duration; books
- * that can't be fetched count toward `missingBook`.
+ * Price the top opportunities with live order books, returning a map keyed by
+ * opportunity id so the corresponding snapshots can carry executable fields.
+ * Bounded to respect rate limits and function duration.
  */
-async function sampleExecutable(opportunities: Opportunity[]) {
+async function sampleExecutable(
+  opportunities: Opportunity[],
+): Promise<Map<string, ExecutablePricing>> {
   const sample = opportunities.slice(0, EXECUTABLE_SAMPLE_SIZE);
-  const priced = await Promise.all(
+  const out = new Map<string, ExecutablePricing>();
+  await Promise.all(
     sample.map(async (opportunity) => {
-      let pricing: ExecutablePricing;
       try {
-        pricing = await priceOpportunity(opportunity);
+        out.set(opportunityKey(opportunity), await priceOpportunity(opportunity));
       } catch {
-        pricing = {
-          available: false,
-          indicativeMargin: opportunity.netMargin,
-          executableMargin: null,
-          maxStake: null,
-          maxSize: null,
-          legs: [],
-          note: "pricing failed",
-        };
+        /* leave unsampled — snapshot executable fields stay null */
       }
-      return { opportunity, pricing };
     }),
   );
-  return summarizeExecutable(priced);
+  return out;
 }
 
 /**
- * Persist a scan: update opportunity history and append a full analytics
- * snapshot (including a sampled executable summary). Driven by the cron
- * endpoint so appearance counts and metrics track time.
+ * Persist a scan to Supabase (system of record): upsert the matched-pair
+ * identities and insert one opportunity snapshot per opportunity (top
+ * MAX_SNAPSHOTS_PER_SCAN by score), with executable fields filled for the
+ * sampled subset. No-ops when Supabase isn't configured.
  */
 export async function recordScan(result: ScanResult): Promise<void> {
-  const store = getStore();
+  const scanAt = result.generatedAt;
+  const pricings = await sampleExecutable(result.opportunities);
 
-  const history =
-    (await store.getJSON<Record<string, OpportunityHistory>>(KEYS.history)) ?? {};
-  const updated = upsertHistory(history, result.opportunities, result.generatedAt);
-  await store.setJSON(KEYS.history, updated);
+  const tracked = result.opportunities.slice(0, MAX_SNAPSHOTS_PER_SCAN);
+  const matches = tracked.map((o) => matchRow(o, scanAt));
+  const snapshots = tracked.map((o) =>
+    snapshotRow(o, scanAt, pricings.get(opportunityKey(o))),
+  );
 
-  const executable = await sampleExecutable(result.opportunities);
-  const snapshot = buildSnapshot(result, executable);
+  await persistScan(matches, snapshots);
+}
 
-  const snapshots =
-    (await store.getJSON<AnalyticsSnapshot[]>(KEYS.analytics)) ?? [];
-  snapshots.push(snapshot);
-  // Keep the most recent 1000 snapshots (~6 weeks at hourly).
-  await store.setJSON(KEYS.analytics, snapshots.slice(-1000));
+/** Persist a disagreement scan to Supabase. */
+export async function recordDisagreements(scan: DisagreementScan): Promise<void> {
+  const rows = scan.disagreements.map((d) => disagreementRow(d, scan.generatedAt));
+  await persistDisagreements(rows);
 }

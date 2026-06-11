@@ -61,9 +61,11 @@ See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for the deployment checklist, required
 environment variables, upstream endpoints, rate limits, and how to answer the
 live-validation success-criteria questions.
 
-> **Persistence note:** review decisions and history require a KV store
-> (Vercel KV / Upstash Redis) on Vercel — set `KV_REST_API_URL` /
-> `KV_REST_API_TOKEN`. Without it, storage is ephemeral.
+> **Persistence:** **Supabase Postgres** is the system of record for all
+> permanent data (snapshots, matches, reviews, disagreements, events). Set
+> `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` and apply the migration in
+> `supabase/migrations`. See **[SUPABASE.md](./SUPABASE.md)**. Without it the app
+> still runs live scans but persists nothing.
 
 ## How it works
 
