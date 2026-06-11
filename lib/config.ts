@@ -8,10 +8,18 @@ function numEnv(key: string, fallback: number): number {
 }
 
 export const CONFIG = {
-  /** Minimum margin (as a fraction) for an opportunity to be reported. 0.05 = 5%. */
+  /** Default minimum margin (fraction) the UI filter starts at. 0.05 = 5%. */
   minMargin: numEnv("MIN_MARGIN", 0.05),
-  /** Minimum title-similarity (0–1) required to treat two markets as the same event. */
+  /** Default minimum title-similarity (0–1) the UI confidence filter starts at. */
   matchThreshold: numEnv("MATCH_THRESHOLD", 0.5),
+  /**
+   * Discovery floor for the server scan — opportunities are collected down to
+   * these thresholds so the client can filter (and surface a Top-5 fallback)
+   * without re-fetching. The UI never shows below `discoveryMargin` except in
+   * the Top-5 fallback.
+   */
+  discoveryMargin: numEnv("DISCOVERY_MARGIN", 0),
+  discoveryMatchThreshold: numEnv("DISCOVERY_MATCH_THRESHOLD", 0.45),
   /** Maximum number of markets to pull from each venue per scan. */
   maxMarkets: numEnv("MAX_MARKETS", 500),
   /** Seconds to cache upstream API responses (Next.js fetch revalidation). */

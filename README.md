@@ -11,9 +11,27 @@ trading and profit fees), with the raw gross spread shown alongside.
 > Polymarket prices YES at 42¢ and Kalshi prices NO at 50¢, buying both locks
 > in a \$1 payout for 92¢ → an 8% margin.
 
-The initial delivery is a basic app that **presents all opportunities**, sorted
-by margin, with a match-confidence score on each pairing. Built with Next.js so
-it deploys to **Vercel** out of the box.
+It ships as a **professional trading terminal** (Bloomberg-style, dark by
+default), built with Next.js so it deploys to **Vercel** out of the box.
+
+## Terminal features
+
+- **Dashboard summary cards** — opportunities found, best margin, average
+  margin, markets scanned, venues scanned (live with the filters).
+- **Dynamic filtering** (all client-side, instant): minimum margin, match
+  confidence, venue, expiry window, and category, plus sort control. Defaults
+  to a 5% margin filter; **always shows the Top 5 by score** when nothing meets
+  the filters, so the dashboard is never empty.
+- **Opportunity detail panel** — click any row for full metrics (gross/net
+  margin, confidence, liquidity, resolution date), risk notes, both venue legs
+  with direct links, and a **VERIFIED / REVIEW REQUIRED / HIGH RISK** indicator.
+- **Execution calculator** — enter a stake and see per-leg allocation, total
+  capital, guaranteed net profit, and net ROI, updating live.
+- **Opportunity Score (0–100)** — blends margin, confidence, liquidity, and
+  time-to-expiry to surface the most *actionable* trades; default sort.
+- **Order-book foundation** (`lib/orderbook.ts`) — data structures and a stubbed
+  executable-pricing path, ready to replace indicative quotes later.
+- Loading skeletons, empty states, partial-outage handling, mobile-responsive.
 
 ## How it works
 
@@ -34,8 +52,11 @@ PredictIt API ────────┘
   via an inverted token index, and takes the best of the two arb directions per
   pair by net margin.
 - **`lib/scan.ts`** — orchestrates a full scan (parallel, fault-tolerant per venue).
-- **`app/page.tsx`** — renders the opportunities table; **`app/api/opportunities`**
-  exposes the same data as JSON.
+- **`lib/category.ts` / `lib/scoring.ts` / `lib/risk.ts`** — classify, score
+  (0–100), and assess each opportunity (status + risk notes).
+- **`lib/filters.ts`** — pure, tested filtering/sorting with Top-5 fallback.
+- **`app/page.tsx`** renders the `components/terminal/*` client dashboard;
+  **`app/api/opportunities`** exposes the same enriched data as JSON.
 
 ## Venues & fees
 

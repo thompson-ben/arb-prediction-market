@@ -1,14 +1,54 @@
 @import "tailwindcss";
 
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
 }
 
 html,
 body {
-  background: #0b0f17;
+  background: #070a11;
   color: #e6e8ec;
   font-family:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
     Arial, sans-serif;
+}
+
+/* Subtle terminal grid backdrop. */
+body {
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.06), transparent 45%),
+    linear-gradient(to bottom, #070a11, #05070d);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+/* Thin, dark scrollbars to match the terminal aesthetic. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+/* Monospace numerics for that financial-data feel. */
+.font-mono {
+  font-family:
+    ui-monospace, "SF Mono", "JetBrains Mono", "Menlo", "Consolas", monospace;
+}
+
+/* Hide number-input spinners for a cleaner stake field. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }

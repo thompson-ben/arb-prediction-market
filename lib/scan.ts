@@ -18,15 +18,14 @@ const SOURCES: VenueSource[] = [
 
 /**
  * Run a full cross-venue scan: pull markets from every source in parallel,
- * pool them, match across venues, and return arbitrage opportunities at or
- * above the configured minimum net margin.
+ * pool them, match across venues, and return arbitrage opportunities down to
+ * the discovery floor. The client filters this set interactively (and the UI
+ * defaults to a 5% margin filter), so the scan collects generously.
  *
  * Uses `allSettled` so a single venue outage degrades gracefully (its markets
  * are simply absent) rather than failing the entire scan.
  */
-export async function scanOpportunities(): Promise<
-  ScanResult & { errors: Partial<Record<Venue, string>> }
-> {
+export async function scanOpportunities(): Promise<ScanResult> {
   const settled = await Promise.allSettled(SOURCES.map((s) => s.fetch()));
 
   const pool: NormalizedMarket[] = [];
@@ -46,15 +45,21 @@ export async function scanOpportunities(): Promise<
   });
 
   const opportunities = buildOpportunities(pool, {
-    minMargin: CONFIG.minMargin,
-    matchThreshold: CONFIG.matchThreshold,
+    minMargin: CONFIG.discoveryMargin,
+    matchThreshold: CONFIG.discoveryMatchThreshold,
   });
+
+  const marketsScanned = pool.length;
+  const venuesScanned = Object.values(counts).filter((c) => (c ?? 0) > 0).length;
 
   return {
     opportunities,
     counts,
+    marketsScanned,
+    venuesScanned,
+    errors,
+    // The UI's *default* filter starts here, not the discovery floor.
     config: { minMargin: CONFIG.minMargin, matchThreshold: CONFIG.matchThreshold },
     generatedAt: new Date().toISOString(),
-    errors,
   };
 }

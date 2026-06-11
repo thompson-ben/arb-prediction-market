@@ -1,4 +1,7 @@
+import { categorize } from "@/lib/category";
 import { jaccard } from "@/lib/normalize";
+import { bottleneckLiquidity, deriveStatus, riskNotes } from "@/lib/risk";
+import { computeScore } from "@/lib/scoring";
 import type { ArbLeg, NormalizedMarket, Opportunity } from "@/lib/types";
 import { VENUES } from "@/lib/venues";
 
@@ -8,7 +11,14 @@ function isTradeable(price: number): boolean {
 }
 
 function leg(market: NormalizedMarket, side: "YES" | "NO", price: number): ArbLeg {
-  return { venue: market.venue, side, price, title: market.title, url: market.url };
+  return {
+    venue: market.venue,
+    side,
+    price,
+    title: market.title,
+    url: market.url,
+    liquidity: market.liquidity,
+  };
 }
 
 /** Buy cost for one share including the venue's upfront trading fee. */
@@ -134,23 +144,49 @@ export function buildOpportunities(
       const arb = computeArb(a, b);
       if (arb === null || arb.netMargin < options.minMargin) continue;
 
+      const venues: [typeof a.venue, typeof b.venue] = [
+        arb.legs[0].venue,
+        arb.legs[1].venue,
+      ];
+      const endDate = earliestDate(a.endDate, b.endDate);
+      const liquidity = bottleneckLiquidity(a, b);
+      const riskInput = {
+        confidence: score,
+        netMargin: arb.netMargin,
+        venues,
+        liquidity,
+        endDate,
+      };
+
       opportunities.push({
         id: `${a.id}::${b.id}`,
         question: a.title,
+        category: categorize(a.title),
         matchScore: score,
-        venues: [arb.legs[0].venue, arb.legs[1].venue],
+        score: computeScore({
+          netMargin: arb.netMargin,
+          confidence: score,
+          liquidity,
+          endDate,
+        }),
+        status: deriveStatus(riskInput),
+        riskNotes: riskNotes(riskInput),
+        pricing: "indicative",
+        venues,
         legs: arb.legs,
         cost: arb.cost,
         grossMargin: arb.grossMargin,
         netMargin: arb.netMargin,
         grossMarginPct: arb.grossMargin * 100,
         netMarginPct: arb.netMargin * 100,
+        liquidity,
         marketA: a,
         marketB: b,
-        endDate: earliestDate(a.endDate, b.endDate),
+        endDate,
       });
     }
   }
 
-  return opportunities.sort((x, y) => y.netMargin - x.netMargin);
+  // Default ordering is by actionability score (Priority 6).
+  return opportunities.sort((x, y) => y.score - x.score);
 }

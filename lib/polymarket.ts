@@ -33,6 +33,7 @@ interface GammaMarket {
   outcomePrices?: unknown;
   endDate?: string;
   volume?: unknown;
+  liquidity?: unknown;
 }
 
 /** Normalize a single Gamma market, or return null if it isn't a usable binary market. */
@@ -69,6 +70,7 @@ export function normalizePolymarketMarket(m: GammaMarket): NormalizedMarket | nu
     endDate: m.endDate,
     url,
     volume: toNumber(m.volume),
+    liquidity: toNumber(m.liquidity),
     tokens: normalizeTokens(title),
   };
 }

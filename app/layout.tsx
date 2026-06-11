@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Prediction Market Arbitrage",
+  title: "Arb Terminal — Prediction Market Arbitrage",
   description:
-    "Cross-venue arbitrage opportunities between Polymarket and Kalshi (margin ≥ 5%).",
+    "Professional cross-venue arbitrage terminal for Polymarket, Kalshi, and PredictIt.",
 };
 
 export default function RootLayout({

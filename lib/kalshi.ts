@@ -26,6 +26,7 @@ interface KalshiMarket {
   no_ask?: number;
   close_time?: string;
   volume?: number;
+  liquidity?: number;
   status?: string;
 }
 
@@ -55,6 +56,8 @@ export function normalizeKalshiMarket(m: KalshiMarket): NormalizedMarket | null 
     endDate: m.close_time,
     url,
     volume: toNumber(m.volume),
+    // Kalshi reports monetary values in cents; convert resting liquidity to dollars.
+    liquidity: m.liquidity != null ? Number(m.liquidity) / 100 : undefined,
     tokens: normalizeTokens(matchText),
   };
 }
