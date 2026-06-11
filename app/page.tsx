@@ -3,6 +3,7 @@ import { scanOpportunities } from "@/lib/scan";
 
 // Always run the scan fresh on request (upstream fetches are cached separately).
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export default async function Home() {
   try {

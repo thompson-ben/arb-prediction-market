@@ -1,0 +1,41 @@
+# Optional: hourly scan trigger for richer live data on the Vercel Hobby plan
+# (Vercel Hobby cron only runs once per day). This pings the deployed cron
+# endpoint, which records an analytics + history snapshot each run.
+#
+# Setup (Settings → Secrets and variables → Actions):
+#   SCAN_URL     = https://<your-app>.vercel.app/api/cron/scan
+#   CRON_SECRET  = the same value set in Vercel env (optional but recommended)
+#
+# Notes:
+#   - The workflow must live on the default branch to be scheduled.
+#   - GitHub-scheduled runs can be delayed by a few minutes under load.
+#   - Remove this file (or disable the workflow) if you upgrade to Vercel Pro
+#     and raise the vercel.json cron frequency instead.
+name: Scheduled scan
+
+on:
+  schedule:
+    - cron: "0 * * * *" # hourly, on the hour (UTC)
+  workflow_dispatch: {}
+
+# Avoid overlapping runs.
+concurrency:
+  group: scheduled-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger scan
+        run: |
+          if [ -z "${SCAN_URL}" ]; then
+            echo "SCAN_URL secret not set; skipping."
+            exit 0
+          fi
+          curl -fsS -X GET "${SCAN_URL}" \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            --max-time 90
+        env:
+          SCAN_URL: ${{ secrets.SCAN_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}

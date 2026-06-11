@@ -4,6 +4,7 @@ import { venueLabel } from "@/lib/venues";
 import type { Disagreement } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 function SpreadBar({ d }: { d: Disagreement }) {
   // Plot each venue's implied probability on a 0–100% track.

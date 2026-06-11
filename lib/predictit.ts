@@ -1,4 +1,5 @@
 import { CONFIG } from "@/lib/config";
+import { fetchWithTimeout } from "@/lib/http";
 import { normalizeTokens } from "@/lib/normalize";
 import type { NormalizedMarket } from "@/lib/types";
 
@@ -76,7 +77,7 @@ export function normalizePredictItMarket(m: PredictItMarket): NormalizedMarket[]
 
 /** Fetch and normalize all PredictIt binary contracts. */
 export async function fetchPredictItMarkets(): Promise<NormalizedMarket[]> {
-  const res = await fetch(PREDICTIT_URL, {
+  const res = await fetchWithTimeout(PREDICTIT_URL, {
     headers: { accept: "application/json" },
     next: { revalidate: CONFIG.revalidateSeconds },
   });

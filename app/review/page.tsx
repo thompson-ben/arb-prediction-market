@@ -6,6 +6,7 @@ import { assessMatch } from "@/lib/trust";
 import type { ReviewDecision } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const MAX_ITEMS = 150;
 

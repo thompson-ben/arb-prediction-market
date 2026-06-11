@@ -5,6 +5,7 @@ import { venueLabel } from "@/lib/venues";
 import type { ScanDiagnostics, Venue } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (

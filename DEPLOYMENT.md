@@ -17,8 +17,12 @@ market data, and the operational facts needed to evaluate data quality.
       `/history`.
 - [ ] Confirm the cron job appears under **Settings → Cron Jobs** (defined in
       `vercel.json`, **once daily** — the Hobby-plan max; more frequent on Pro).
+- [ ] Hit **`/api/health`** — should return `200` with every venue `ok: true`
+      and `store.persistent: true` (KV configured). This is your "verify all
+      APIs are functioning" check.
 - [ ] Manually hit `/api/cron/scan` once to seed history, then check `/history`.
 - [ ] Verify live data is flowing on `/validation` (markets per venue > 0).
+- [ ] (Optional) Enable the hourly GitHub Actions scan for richer data — see §8.
 
 ## 2. Environment variables
 
@@ -113,3 +117,33 @@ CSV export (for offline analysis):
 Executable metrics come from sampling the **top 8** opportunities' live order
 books each scan (bounded for rate limits), so they are representative rather
 than exhaustive.
+
+## 8. Operational stability (unattended 7–14 day run)
+
+Built-in safeguards:
+
+- **Upstream timeouts** — every venue/order-book request has an 6–8s timeout; a
+  hung API aborts and is handled gracefully (`allSettled`), so one slow venue
+  never stalls a scan or fails the cron.
+- **`maxDuration = 60`** on all scan-running routes (`/`, `/validation`,
+  `/disagreements`, `/review`, `/api/opportunities`, `/api/cron/scan`) so full
+  scans aren't cut off at the default limit.
+- **Partial-result mode** — a venue outage shows the others (with a banner)
+  rather than erroring the whole page.
+- **`/api/health`** — point an uptime monitor (UptimeRobot, Better Stack, etc.)
+  at it to be alerted if a venue or the store goes down during collection.
+
+If the cron scan ever times out, lower `MAX_MARKETS` (e.g. 300).
+
+### Hourly data on the free plan (recommended for duration metrics)
+
+Vercel Hobby cron runs only **once per day**, which makes "average opportunity
+duration" coarse. A ready-to-use GitHub Actions workflow
+(`.github/workflows/scheduled-scan.yml`) pings the scan endpoint **hourly**.
+To enable it, add two repo secrets (Settings → Secrets and variables → Actions):
+
+- `SCAN_URL` = `https://<your-app>.vercel.app/api/cron/scan`
+- `CRON_SECRET` = the same value set in Vercel env
+
+The workflow no-ops safely until `SCAN_URL` is set. Disable it if you upgrade to
+Pro and raise the `vercel.json` cron frequency instead.

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { scanOpportunities } from "@/lib/scan";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 /** GET /api/opportunities — JSON feed of current cross-venue opportunities. */
 export async function GET() {

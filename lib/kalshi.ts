@@ -1,4 +1,5 @@
 import { CONFIG } from "@/lib/config";
+import { fetchWithTimeout } from "@/lib/http";
 import { normalizeTokens } from "@/lib/normalize";
 import type { NormalizedMarket } from "@/lib/types";
 
@@ -79,7 +80,7 @@ export async function fetchKalshiMarkets(
     });
     if (cursor) params.set("cursor", cursor);
 
-    const res = await fetch(`${KALSHI_URL}?${params.toString()}`, {
+    const res = await fetchWithTimeout(`${KALSHI_URL}?${params.toString()}`, {
       headers: { accept: "application/json" },
       next: { revalidate: CONFIG.revalidateSeconds },
     });

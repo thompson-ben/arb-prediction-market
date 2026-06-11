@@ -11,6 +11,7 @@
  *   • PredictIt  — no public order book → unavailable.
  */
 
+import { fetchWithTimeout } from "@/lib/http";
 import { computeExecutablePricing } from "@/lib/orderbook";
 import type {
   ExecutablePricing,
@@ -51,10 +52,11 @@ function levelsFrom(raw: unknown, priceKey: string, sizeKey: string): OrderBookL
 /** Fetch the ask side of a Polymarket CLOB book for a given outcome token. */
 export async function fetchPolymarketBook(tokenId: string): Promise<OrderBook | null> {
   try {
-    const res = await fetch(`${POLY_CLOB}?token_id=${encodeURIComponent(tokenId)}`, {
-      headers: { accept: "application/json" },
-      cache: "no-store",
-    });
+    const res = await fetchWithTimeout(
+      `${POLY_CLOB}?token_id=${encodeURIComponent(tokenId)}`,
+      { headers: { accept: "application/json" }, cache: "no-store" },
+      6000,
+    );
     if (!res.ok) return null;
     const data = (await res.json()) as { bids?: unknown; asks?: unknown };
     return {
@@ -77,9 +79,10 @@ export async function fetchKalshiBook(
   side: "yes" | "no",
 ): Promise<OrderBook | null> {
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `${KALSHI_BASE}/markets/${encodeURIComponent(ticker)}/orderbook`,
       { headers: { accept: "application/json" }, cache: "no-store" },
+      6000,
     );
     if (!res.ok) return null;
     const data = (await res.json()) as {

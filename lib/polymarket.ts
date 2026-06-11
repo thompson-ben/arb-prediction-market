@@ -1,4 +1,5 @@
 import { CONFIG } from "@/lib/config";
+import { fetchWithTimeout } from "@/lib/http";
 import { normalizeTokens } from "@/lib/normalize";
 import type { NormalizedMarket } from "@/lib/types";
 
@@ -91,7 +92,7 @@ export async function fetchPolymarketMarkets(
       `${GAMMA_URL}?closed=false&active=true&limit=${PAGE_SIZE}` +
       `&offset=${offset}&order=volume&ascending=false`;
 
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       headers: { accept: "application/json" },
       next: { revalidate: CONFIG.revalidateSeconds },
     });
