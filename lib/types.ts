@@ -1,6 +1,6 @@
 /** Core domain types for cross-venue prediction-market arbitrage. */
 
-export type Venue = "polymarket" | "kalshi";
+export type Venue = "polymarket" | "kalshi" | "predictit";
 
 export type Side = "YES" | "NO";
 
@@ -41,31 +41,41 @@ export interface ArbLeg {
 
 /** A cross-venue arbitrage opportunity between two matched markets. */
 export interface Opportunity {
-  /** Stable composite id (polymarket id + kalshi ticker). */
+  /** Stable composite id (venueA market id + venueB market id). */
   id: string;
   /** Representative question for the matched event. */
   question: string;
   /** Title-similarity score of the match, 0–1 (higher = more confident). */
   matchScore: number;
+  /** The two venues involved, in leg order. */
+  venues: [Venue, Venue];
   /** The two outcomes to buy. Together they cover both sides of the event. */
   legs: [ArbLeg, ArbLeg];
-  /** Combined cost of both legs, in dollars. */
+  /** Combined cost of both legs including upfront trading fees, in dollars. */
   cost: number;
-  /** Risk-free margin per \$1 of payout (1 - cost). */
-  margin: number;
-  /** Margin expressed as a percentage. */
-  marginPct: number;
-  /** Underlying market on each venue (for inspection). */
-  polymarket: NormalizedMarket;
-  kalshi: NormalizedMarket;
+  /** Margin before resolution/profit fees (1 - cost). */
+  grossMargin: number;
+  /**
+   * Worst-case margin after per-venue trading and profit fees — the honest,
+   * guaranteed edge. Always ≤ grossMargin.
+   */
+  netMargin: number;
+  /** grossMargin as a percentage. */
+  grossMarginPct: number;
+  /** netMargin as a percentage. */
+  netMarginPct: number;
+  /** Underlying matched market on each venue (for inspection). */
+  marketA: NormalizedMarket;
+  marketB: NormalizedMarket;
   /** Earliest resolution date among the legs, if known. */
   endDate?: string;
 }
 
-/** Result of a full scan across both venues. */
+/** Result of a full scan across all configured venues. */
 export interface ScanResult {
   opportunities: Opportunity[];
-  counts: { polymarket: number; kalshi: number };
+  /** Number of normalized markets pulled per venue. */
+  counts: Partial<Record<Venue, number>>;
   config: { minMargin: number; matchThreshold: number };
   generatedAt: string;
 }

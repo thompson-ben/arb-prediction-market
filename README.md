@@ -1,10 +1,11 @@
 # arb-prediction-market
 
 A cross-venue **arbitrage scanner** for prediction markets. It pulls active
-binary (Yes/No) markets from **Polymarket** and **Kalshi**, matches the same
-event across both venues, and surfaces opportunities where you can buy YES on
-one venue and NO on the other for a combined cost below \$1 — i.e. a risk-free
-**margin ≥ 5%**.
+binary (Yes/No) markets from **Polymarket**, **Kalshi**, and **PredictIt**,
+matches the same event across venues, and surfaces opportunities where you can
+buy YES on one venue and NO on another for a combined cost below \$1 — i.e. a
+risk-free **margin ≥ 5%**. Margins are **fee-adjusted** (net of each venue's
+trading and profit fees), with the raw gross spread shown alongside.
 
 > Example event: *"Is the Strait of Hormuz likely to close in July?"* — if
 > Polymarket prices YES at 42¢ and Kalshi prices NO at 50¢, buying both locks
@@ -18,19 +19,34 @@ it deploys to **Vercel** out of the box.
 
 ```
 Polymarket Gamma API ─┐
-                      ├─► normalize ─► match by title similarity ─► compute arb ─► filter ≥ 5% ─► UI
-Kalshi v2 API ────────┘
+Kalshi v2 API ────────┼─► normalize ─► pool ─► match (inverted index) ─► fee-adjusted arb ─► filter net ≥ 5% ─► UI
+PredictIt API ────────┘
 ```
 
-- **`lib/polymarket.ts` / `lib/kalshi.ts`** — fetch and normalize each venue's
-  markets into a common `NormalizedMarket` shape (cost in dollars to buy YES/NO).
+- **`lib/polymarket.ts` / `lib/kalshi.ts` / `lib/predictit.ts`** — fetch and
+  normalize each venue's markets into a common `NormalizedMarket` shape (cost in
+  dollars to buy YES/NO).
+- **`lib/venues.ts`** — per-venue metadata and **fee model** (trading fee +
+  profit fee) used to compute net margin.
 - **`lib/normalize.ts`** — tokenizes questions (drops stopwords, keeps years)
   and scores similarity with Jaccard overlap.
-- **`lib/match.ts`** — matches markets across venues using an inverted token
-  index, then takes the cheaper of the two arb directions per pair.
-- **`lib/scan.ts`** — orchestrates a full scan.
+- **`lib/match.ts`** — venue-agnostic: pools all markets, matches across venues
+  via an inverted token index, and takes the best of the two arb directions per
+  pair by net margin.
+- **`lib/scan.ts`** — orchestrates a full scan (parallel, fault-tolerant per venue).
 - **`app/page.tsx`** — renders the opportunities table; **`app/api/opportunities`**
   exposes the same data as JSON.
+
+## Venues & fees
+
+Net margin subtracts an estimate of each venue's fees per \$1 of payout. Add a
+new venue by adding a fetcher and an entry in `lib/venues.ts`.
+
+| Venue      | Trading fee (approx)     | Profit fee | Notes                                  |
+| ---------- | ------------------------ | ---------- | -------------------------------------- |
+| Polymarket | 0%                       | 0%         | Gas on deposit/withdraw not modeled    |
+| Kalshi     | ≈ 0.07·P·(1−P) per share | 0%         | Approximation of published schedule    |
+| PredictIt  | 0%                       | 5%         | +5% withdrawal fee (not modeled); caps |
 
 ## Getting started
 
@@ -70,20 +86,24 @@ All thresholds are environment variables (set them in the Vercel dashboard):
 
 ## Caveats (read before trading real money)
 
-- **Indicative prices.** Polymarket `outcomePrices` and Kalshi asks are public
-  quotes, not guaranteed fills. Real execution needs live order-book depth.
+- **Indicative prices.** Venue quotes (Polymarket `outcomePrices`, Kalshi asks,
+  PredictIt best-buy costs) are not guaranteed fills. Real execution needs live
+  order-book depth.
 - **Automated matching is approximate.** Pairs are matched by question
   similarity; always confirm both markets resolve on *identical* terms and
   dates. The displayed match score and a "verify — large" flag on outsized
   margins are there to help you sanity-check.
-- **Costs not modeled.** Trading fees, gas, slippage, and withdrawal costs are
-  not yet subtracted from the margin.
+- **Fees partially modeled.** Net margin subtracts estimated trading and profit
+  fees, but slippage, gas, withdrawal fees, and PredictIt's per-contract caps
+  ($850) are not. PredictIt's fees often erase a nominal 5% edge — treat its
+  opportunities with extra care.
 
 ## Roadmap
 
 - Order-book-aware pricing (Polymarket CLOB, Kalshi orderbook endpoints).
 - Curated/known-pair mapping to eliminate false matches.
-- Fee- and slippage-adjusted net margin.
+- Slippage- and cap-aware sizing on top of the existing fee model.
+- More venues (e.g. on-chain real-money venues; a Manifold "fair value" reference column).
 - Auto-refresh and historical opportunity tracking.
 
 ## License

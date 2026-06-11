@@ -1,5 +1,6 @@
 import { jaccard } from "@/lib/normalize";
 import type { ArbLeg, NormalizedMarket, Opportunity } from "@/lib/types";
+import { VENUES } from "@/lib/venues";
 
 /** A price is usable for an arb leg only if it is a real, sub-\$1 cost. */
 function isTradeable(price: number): boolean {
@@ -7,45 +8,72 @@ function isTradeable(price: number): boolean {
 }
 
 function leg(market: NormalizedMarket, side: "YES" | "NO", price: number): ArbLeg {
+  return { venue: market.venue, side, price, title: market.title, url: market.url };
+}
+
+/** Buy cost for one share including the venue's upfront trading fee. */
+function legCost(market: NormalizedMarket, price: number): number {
+  return price + VENUES[market.venue].tradingFee(price);
+}
+
+export interface ArbResult {
+  cost: number;
+  grossMargin: number;
+  netMargin: number;
+  legs: [ArbLeg, ArbLeg];
+}
+
+/**
+ * Evaluate one arbitrage direction: buy YES on `yesM` and NO on `noM`.
+ *
+ * Gross margin ignores fees. Net margin is the *worst case* across the two
+ * possible resolutions, after subtracting each winning leg's profit fee — i.e.
+ * the guaranteed edge you actually keep.
+ */
+function evaluateDirection(
+  yesM: NormalizedMarket,
+  yesPrice: number,
+  noM: NormalizedMarket,
+  noPrice: number,
+): ArbResult | null {
+  if (!isTradeable(yesPrice) || !isTradeable(noPrice)) return null;
+
+  // Gross margin is the raw price spread, before any fees.
+  const grossMargin = 1 - (yesPrice + noPrice);
+
+  // Actual cash outlay includes each venue's upfront trading fee.
+  const cost = legCost(yesM, yesPrice) + legCost(noM, noPrice);
+
+  // If the event resolves YES, the YES leg pays \$1 minus its profit fee; the
+  // NO leg expires worthless. Vice-versa for a NO resolution. Net margin is the
+  // worst of the two — the guaranteed edge after trading and profit fees.
+  const yesWinNet = 1 - VENUES[yesM.venue].profitFeeRate * (1 - yesPrice) - cost;
+  const noWinNet = 1 - VENUES[noM.venue].profitFeeRate * (1 - noPrice) - cost;
+  const netMargin = Math.min(yesWinNet, noWinNet);
+
   return {
-    venue: market.venue,
-    side,
-    price,
-    title: market.title,
-    url: market.url,
+    cost,
+    grossMargin,
+    netMargin,
+    legs: [leg(yesM, "YES", yesPrice), leg(noM, "NO", noPrice)],
   };
 }
 
 /**
- * Given two matched markets, find the cheaper of the two arbitrage directions
- * (buy YES on one venue + NO on the other). Returns null if neither direction
- * is tradeable.
+ * Given two matched markets on different venues, return the better of the two
+ * arbitrage directions (by net margin), or null if neither is tradeable.
  */
 export function computeArb(
-  pm: NormalizedMarket,
-  kalshi: NormalizedMarket,
-): { cost: number; margin: number; legs: [ArbLeg, ArbLeg] } | null {
-  const directions: { cost: number; legs: [ArbLeg, ArbLeg] }[] = [];
-
-  // Direction A: YES on Polymarket + NO on Kalshi.
-  if (isTradeable(pm.yesAsk) && isTradeable(kalshi.noAsk)) {
-    directions.push({
-      cost: pm.yesAsk + kalshi.noAsk,
-      legs: [leg(pm, "YES", pm.yesAsk), leg(kalshi, "NO", kalshi.noAsk)],
-    });
-  }
-  // Direction B: YES on Kalshi + NO on Polymarket.
-  if (isTradeable(kalshi.yesAsk) && isTradeable(pm.noAsk)) {
-    directions.push({
-      cost: kalshi.yesAsk + pm.noAsk,
-      legs: [leg(kalshi, "YES", kalshi.yesAsk), leg(pm, "NO", pm.noAsk)],
-    });
-  }
+  a: NormalizedMarket,
+  b: NormalizedMarket,
+): ArbResult | null {
+  const directions = [
+    evaluateDirection(a, a.yesAsk, b, b.noAsk), // YES on a + NO on b
+    evaluateDirection(b, b.yesAsk, a, a.noAsk), // YES on b + NO on a
+  ].filter((d): d is ArbResult => d !== null);
 
   if (directions.length === 0) return null;
-
-  const best = directions.reduce((a, b) => (b.cost < a.cost ? b : a));
-  return { cost: best.cost, margin: 1 - best.cost, legs: best.legs };
+  return directions.reduce((best, d) => (d.netMargin > best.netMargin ? d : best));
 }
 
 function earliestDate(a?: string, b?: string): string | undefined {
@@ -55,26 +83,28 @@ function earliestDate(a?: string, b?: string): string | undefined {
 }
 
 export interface MatchOptions {
-  /** Minimum margin fraction to report (e.g. 0.05 for 5%). */
+  /** Minimum net margin fraction to report (e.g. 0.05 for 5%). */
   minMargin: number;
   /** Minimum title similarity to treat two markets as the same event. */
   matchThreshold: number;
 }
 
 /**
- * Match Polymarket markets against Kalshi markets and return the cross-venue
- * arbitrage opportunities whose margin meets `minMargin`, sorted by margin
- * descending. Uses an inverted token index so matching stays roughly linear
- * rather than O(n × m).
+ * Match markets across venues from a single pooled list and return the
+ * cross-venue arbitrage opportunities whose *net* margin meets `minMargin`,
+ * sorted by net margin descending.
+ *
+ * Uses an inverted token index so each market is only compared against
+ * candidates that share a significant token, keeping this near-linear rather
+ * than O(n²). Each unordered cross-venue pair is evaluated at most once.
  */
 export function buildOpportunities(
-  polymarket: NormalizedMarket[],
-  kalshi: NormalizedMarket[],
+  markets: NormalizedMarket[],
   options: MatchOptions,
 ): Opportunity[] {
-  // token -> indices of kalshi markets containing it
+  // token -> indices of markets containing it
   const index = new Map<string, number[]>();
-  kalshi.forEach((market, i) => {
+  markets.forEach((market, i) => {
     for (const token of new Set(market.tokens)) {
       const bucket = index.get(token);
       if (bucket) bucket.push(i);
@@ -84,41 +114,43 @@ export function buildOpportunities(
 
   const opportunities: Opportunity[] = [];
 
-  for (const pm of polymarket) {
-    // Gather candidate kalshi markets that share at least one token.
-    const candidateIndices = new Set<number>();
-    for (const token of new Set(pm.tokens)) {
+  for (let i = 0; i < markets.length; i++) {
+    const a = markets[i];
+
+    // Candidate indices sharing at least one token with `a`.
+    const candidates = new Set<number>();
+    for (const token of new Set(a.tokens)) {
       const bucket = index.get(token);
-      if (bucket) for (const i of bucket) candidateIndices.add(i);
+      if (bucket) for (const j of bucket) if (j > i) candidates.add(j);
     }
 
-    // Pick the best-scoring candidate above the threshold.
-    let best: { market: NormalizedMarket; score: number } | null = null;
-    for (const i of candidateIndices) {
-      const candidate = kalshi[i];
-      const score = jaccard(pm.tokens, candidate.tokens);
-      if (score >= options.matchThreshold && (best === null || score > best.score)) {
-        best = { market: candidate, score };
-      }
+    for (const j of candidates) {
+      const b = markets[j];
+      if (a.venue === b.venue) continue; // arb requires two different venues
+
+      const score = jaccard(a.tokens, b.tokens);
+      if (score < options.matchThreshold) continue;
+
+      const arb = computeArb(a, b);
+      if (arb === null || arb.netMargin < options.minMargin) continue;
+
+      opportunities.push({
+        id: `${a.id}::${b.id}`,
+        question: a.title,
+        matchScore: score,
+        venues: [arb.legs[0].venue, arb.legs[1].venue],
+        legs: arb.legs,
+        cost: arb.cost,
+        grossMargin: arb.grossMargin,
+        netMargin: arb.netMargin,
+        grossMarginPct: arb.grossMargin * 100,
+        netMarginPct: arb.netMargin * 100,
+        marketA: a,
+        marketB: b,
+        endDate: earliestDate(a.endDate, b.endDate),
+      });
     }
-    if (best === null) continue;
-
-    const arb = computeArb(pm, best.market);
-    if (arb === null || arb.margin < options.minMargin) continue;
-
-    opportunities.push({
-      id: `${pm.id}::${best.market.id}`,
-      question: pm.title,
-      matchScore: best.score,
-      legs: arb.legs,
-      cost: arb.cost,
-      margin: arb.margin,
-      marginPct: arb.margin * 100,
-      polymarket: pm,
-      kalshi: best.market,
-      endDate: earliestDate(pm.endDate, best.market.endDate),
-    });
   }
 
-  return opportunities.sort((a, b) => b.margin - a.margin);
+  return opportunities.sort((x, y) => y.netMargin - x.netMargin);
 }

@@ -1,13 +1,14 @@
 import { OpportunityTable } from "@/components/OpportunityTable";
 import { RefreshButton } from "@/components/RefreshButton";
 import { scanOpportunities } from "@/lib/scan";
-import type { ScanResult } from "@/lib/types";
+import type { Venue } from "@/lib/types";
+import { venueLabel } from "@/lib/venues";
 
 // Always run the scan fresh on request (upstream fetches are cached separately).
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  let result: ScanResult | null = null;
+  let result: Awaited<ReturnType<typeof scanOpportunities>> | null = null;
   let error: string | null = null;
 
   try {
@@ -15,6 +16,10 @@ export default async function Home() {
   } catch (e) {
     error = e instanceof Error ? e.message : "Unknown error";
   }
+
+  const venueErrors = result
+    ? (Object.entries(result.errors) as [Venue, string][])
+    : [];
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
@@ -38,11 +43,22 @@ export default async function Home() {
         </div>
       ) : result ? (
         <>
+          {venueErrors.length > 0 && (
+            <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200/90">
+              Some venues could not be reached (showing partial results):{" "}
+              {venueErrors.map(([v]) => venueLabel(v)).join(", ")}.
+            </div>
+          )}
           <OpportunityTable opportunities={result.opportunities} />
           <footer className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-white/40">
             <span>{result.opportunities.length} opportunities</span>
-            <span>Polymarket: {result.counts.polymarket} markets</span>
-            <span>Kalshi: {result.counts.kalshi} markets</span>
+            {(Object.entries(result.counts) as [Venue, number][]).map(
+              ([venue, count]) => (
+                <span key={venue}>
+                  {venueLabel(venue)}: {count} markets
+                </span>
+              ),
+            )}
             <span>
               Match threshold: {(result.config.matchThreshold * 100).toFixed(0)}%
             </span>
@@ -51,11 +67,13 @@ export default async function Home() {
             </span>
           </footer>
           <p className="mt-4 max-w-3xl text-xs leading-relaxed text-white/30">
-            Prices shown are indicative quotes from each venue&apos;s public API,
-            not guaranteed fills. Matches are made automatically by question
-            similarity — always confirm both markets resolve on identical terms
-            before trading. Fees, slippage, and resolution-source differences are
-            not accounted for.
+            Net margin subtracts an estimate of each venue&apos;s trading and
+            profit fees (gross is shown beneath it). Prices are indicative quotes
+            from each venue&apos;s public API, not guaranteed fills. Matches are
+            made automatically by question similarity — always confirm both
+            markets resolve on identical terms before trading. Slippage, order-book
+            depth, withdrawal fees, and resolution-source differences are not
+            modeled.
           </p>
         </>
       ) : null}
